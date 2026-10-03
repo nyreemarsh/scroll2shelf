@@ -1,0 +1,21 @@
+{
+  "priceStore": {
+    "id": "2480",
+    "name": "Pantheon 173 Oxford Street",
+    "address": "173 Oxford Street, London W1D 2JR",
+    "url": "https://www.marksandspencer.com/stores/pantheon-173-oxford-street-2480"
+  },
+  "pricesCapturedAt": "2026-10-03T12:36:49+00:00",
+  "rawProducts": 6709,
+  "catalogueProducts": 240,
+  "perCourse": {
+    "starter": 40,
+    "main": 40,
+    "side": 40,
+    "dessert": 40,
+    "drink": 40,
+    "wildcard": 40
+  },
+  "tiktokProductsSpotted": 118,
+  "tiktokProductsInCatalogue": 90
+}

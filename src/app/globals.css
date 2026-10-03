@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  /* Core brand */
+  --color-plum: #3d2d2e;
+  --color-plum-soft: #574243;
+  --color-popcorn: #f8de8d;
+  --color-cerulean: #9bb7d4;
+
+  /* Tints */
+  --color-popcorn-200: #fbe9b4;
+  --color-popcorn-100: #fdf2d4;
+  --color-popcorn-50: #fefaed;
+  --color-cerulean-200: #c5d6e8;
+  --color-cerulean-100: #dde8f3;
+  --color-cerulean-50: #eff4f9;
+
+  /* Neutrals */
+  --color-cream: #faf8f3;
+  --color-sand: #f2ede3;
+  --color-muted: #7b6a66;
+  --color-line: rgba(61, 45, 46, 0.1);
+  --color-line-strong: rgba(61, 45, 46, 0.22);
+
+  --font-sans: var(--font-inclusive-sans), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 14px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-plum);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-popcorn);
+  color: var(--color-plum);
+}
+
+/* Editorial eyebrow label used across dashboard sections. */
+@utility eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
