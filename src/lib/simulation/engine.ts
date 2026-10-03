@@ -1,19 +1,19 @@
-import { MISSION_COURSES, type CatalogueProduct, type Course } from "@/lib/catalogue";
-import { MODEL_CONFIG } from "./config";
 import {
-  applyInterventions,
-  LOPSIDED_WIN_RATE,
-  withInterventionCourses,
-} from "./parameters";
+  MISSION_COURSES,
+  getProduct,
+  type CatalogueProduct,
+  type Course,
+} from "@/lib/catalogue";
+import { MODEL_CONFIG } from "./config";
+import { additionsFor } from "./meal";
 import { hashInts, STREAM, streamFor, type Rng } from "./random";
 import {
-  cheapestPrice,
   considerationSet,
   poolFor,
   reasonsFor,
   sampleIndex,
   topCandidates,
-  type ConsiderationSet,
+  type WeightedPersona,
 } from "./scoring";
 import type {
   Candidate,
@@ -37,14 +37,6 @@ const BEATS: Record<Move, Move> = {
   scissors: "paper",
 };
 
-/**
- * The walkthrough in the simulate step is night 0 of the same Monte Carlo, so
- * the single mission a viewer watches is genuinely one of the runs behind the
- * aggregate numbers rather than a separate draw.
- */
-const WALKTHROUGH_NIGHT = 0;
-
-/** The three draw sequences one night needs, keyed off (seed, night). */
 function streamsFor(seed: number, night: number) {
   return {
     throws: streamFor(seed, night, STREAM.throws),
@@ -53,15 +45,7 @@ function streamsFor(seed: number, night: number) {
   };
 }
 
-/**
- * Rolls every throw of a round into a running hash. Two runs with the same seed
- * must end on the same value, which is how the checks prove an intervention
- * changed only a threshold and not the random draws.
- */
-function fingerprintThrows(
-  current: number,
-  throws: { a: Move; b: Move }[],
-): number {
+function fingerprintThrows(current: number, throws: { a: Move; b: Move }[]) {
   let hash = current;
   for (const pair of throws) {
     hash = hashInts(hash, MOVES.indexOf(pair.a), MOVES.indexOf(pair.b));
@@ -74,100 +58,195 @@ function decideThrow(a: Move, b: Move): ShopperId | null {
   return BEATS[a] === b ? "a" : "b";
 }
 
-/**
- * Throws until someone wins, replaying genuine draws.
- *
- * In lopsided mode a favoured shopper is drawn first; if the deciding throw
- * went the other way the two hands are swapped rather than replayed. The pair
- * of hands on screen always produces the winner on screen, and every replay in
- * `throws` is a real draw — the animation can't contradict the result.
- */
-function playRound(
-  rng: Rng,
-  settings: ModelSettings,
-): Pick<RoundResult, "throws" | "winner"> {
-  // Drawn on every round, played or not, so the stream stays aligned when the
-  // decision style changes between runs.
-  const bias = rng();
-  const target: ShopperId | null =
-    settings.decisionStyle === "lopsided"
-      ? bias < LOPSIDED_WIN_RATE
-        ? "a"
-        : "b"
-      : null;
-
+/** Fair RPS: no persona or retailer control can affect the winning throw. */
+function playRound(rng: Rng): Pick<RoundResult, "throws" | "winner"> {
   const throws: { a: Move; b: Move }[] = [];
   for (let attempt = 0; attempt < MODEL_CONFIG.maxThrows; attempt += 1) {
     const a = MOVES[Math.floor(rng() * MOVES.length)];
     const b = MOVES[Math.floor(rng() * MOVES.length)];
-
-    const winner = decideThrow(a, b);
-    if (!winner) {
-      throws.push({ a, b });
-      continue;
-    }
-
-    if (target && winner !== target) {
-      throws.push({ a: b, b: a });
-      return { throws, winner: target };
-    }
-
     throws.push({ a, b });
-    return { throws, winner };
+    const winner = decideThrow(a, b);
+    if (winner) return { throws, winner };
   }
-  return { throws, winner: target ?? "a" };
+  return { throws, winner: rng() < 0.5 ? "a" : "b" };
 }
 
-/** Starter, main and dessert were played in every post; the rest are rolled for. */
-function isOptional(course: Course): boolean {
-  return !MODEL_CONFIG.alwaysPlayedCourses.includes(course);
+function settingsFor(opts: MissionOptions): ModelSettings {
+  if (!opts.interventions?.some((item) => item.id === "aisle-colocation")) {
+    return opts.settings;
+  }
+  return {
+    ...opts.settings,
+    aisleExperiment: { ...opts.settings.aisleExperiment, enabled: true },
+  };
+}
+
+const clamp = (value: number, min = 0, max = 1) =>
+  Math.max(min, Math.min(max, value));
+
+function average(a: Persona, b: Persona, key: keyof Persona): number {
+  const first = a[key];
+  const second = b[key];
+  return typeof first === "number" && typeof second === "number"
+    ? (first + second) / 2
+    : 0;
 }
 
 /**
- * Whether tonight's couple reaches for an optional course, rolled against the
- * rate it is played at — the observed share of TikTok posts, unless an
- * intervention has raised it.
+ * Decide what belongs in the shop before RPS decides who chooses the product.
+ * The observed journey is a modest prior; visible persona preferences do most
+ * of the work so a health-led couple can add a side and leave dessert behind.
  */
-function rollsCourse(
+export function courseParticipationProbability(
   course: Course,
-  draw: number,
+  a: Persona,
+  b: Persona,
   settings: ModelSettings,
-): boolean {
-  if (!isOptional(course)) return true;
-  return draw < (settings.courseParticipation[course] ?? 0);
-}
+): number {
+  if (course === "main") return 1;
 
-/**
- * The budget gate on optional courses: a couple still skips a round when what
- * is left of the night's budget will not cover even the cheapest thing on the
- * shortlist.
- */
-function canAffordCourse(
-  course: Course,
-  set: ConsiderationSet,
-  runningTotal: number,
-  settings: ModelSettings,
-): boolean {
-  if (isOptional(course)) {
-    return settings.budget - runningTotal >= cheapestPrice(set.products);
+  const observed = settings.courseParticipation[course] ?? 0;
+  const treat = Math.max(a.treatAppetite, b.treatAppetite);
+  const health = Math.max(a.healthOrientation, b.healthOrientation);
+  const novelty = average(a, b, "noveltySeeking");
+  const trend = average(a, b, "trendAffinity");
+  const ease = average(a, b, "easePreference");
+  const waste = average(a, b, "wasteAvoidance");
+  const price = average(a, b, "priceSensitivity");
+  const sharing = settings.couple.sharingPreference;
+  const wantsVegetables = a.healthGoal === "vegetables" || b.healthGoal === "vegetables";
+  const avoidsSugar = a.healthGoal === "less-sugar" || b.healthGoal === "less-sugar";
+
+  switch (course) {
+    case "starter":
+      return clamp(
+        0.08 + 0.35 * observed + 0.2 * treat + 0.08 * novelty +
+          0.08 * sharing + 0.05 * ease - 0.08 * waste - 0.04 * price,
+        0.2,
+        0.9,
+      );
+    case "side": {
+      const propensity =
+        0.08 + 0.16 * observed + 0.54 * health +
+        (wantsVegetables ? 0.18 : 0) + 0.1 * sharing + 0.06 * ease -
+        0.1 * waste - 0.04 * price;
+      return clamp(
+        health >= 0.85 || wantsVegetables ? Math.max(propensity, 0.82) : propensity,
+        0.08,
+        0.95,
+      );
+    }
+    case "dessert":
+      return clamp(
+        0.08 + 0.12 * observed + 0.62 * treat - 0.38 * health -
+          (avoidsSugar ? 0.18 : 0) + 0.08 * sharing - 0.08 * waste -
+          0.04 * price,
+        0.05,
+        0.95,
+      );
+    case "drink":
+      return clamp(
+        0.12 + 0.35 * observed + 0.16 * treat + 0.08 * trend +
+          0.05 * novelty - 0.08 * health - 0.04 * price,
+        0.1,
+        0.85,
+      );
+    case "wildcard":
+      return clamp(
+        0.02 + 0.25 * observed + 0.22 * novelty + 0.17 * treat +
+          0.08 * trend - 0.1 * waste - 0.06 * price,
+        0.03,
+        0.75,
+      );
+    default:
+      return clamp(observed);
   }
-  return true;
 }
 
-function personaFor(a: Persona, b: Persona, shopper: ShopperId): Persona {
-  return shopper === "a" ? a : b;
+function courseDecisionReason(
+  course: Course,
+  selected: boolean,
+  a: Persona,
+  b: Persona,
+): string {
+  const health = Math.max(a.healthOrientation, b.healthOrientation);
+  const wantsVegetables = a.healthGoal === "vegetables" || b.healthGoal === "vegetables";
+  const avoidsSugar = a.healthGoal === "less-sugar" || b.healthGoal === "less-sugar";
+
+  if (course === "main") return "The main is the anchor of this date-night shop.";
+  if (course === "side") {
+    if (selected && (health >= 0.75 || wantsVegetables)) {
+      return "Their health goals made a supporting side likely.";
+    }
+    return selected
+      ? "A more complete shared meal made a side worth adding."
+      : "A separate side did not add enough value for this couple.";
+  }
+  if (course === "dessert") {
+    if (!selected && (health >= 0.7 || avoidsSugar)) {
+      return "Their health priorities outweighed their appetite for dessert."
+    }
+    return selected
+      ? "Their treat appetite made dessert worth adding."
+      : "They chose not to add a sweet course this time.";
+  }
+  if (course === "starter") {
+    return selected
+      ? "A shared opener fitted the occasion."
+      : "They kept the meal focused and skipped a starter.";
+  }
+  if (course === "drink") {
+    return selected
+      ? "A drink fitted the occasion and their preferences."
+      : "A separate drink was not important to this shop.";
+  }
+  return selected
+    ? "Their curiosity left room for one extra pick."
+    : "They stayed with the planned meal instead of adding an extra.";
 }
 
-/** Who gets a say in the pick — the round winner, or both when decided jointly. */
-function decidersFor(
+export function winnerInfluence(settings: ModelSettings): number {
+  return (
+    0.5 +
+    0.5 * settings.couple.winnerControl * (1 - settings.couple.compromise)
+  );
+}
+
+function decisionWeights(
   a: Persona,
   b: Persona,
   winner: ShopperId,
   settings: ModelSettings,
-): Persona[] {
-  return settings.decisionStyle === "joint"
-    ? [a, b]
-    : [personaFor(a, b, winner)];
+): WeightedPersona[] {
+  const winnerShare = winnerInfluence(settings);
+  return winner === "a"
+    ? [
+        { persona: a, share: winnerShare },
+        { persona: b, share: 1 - winnerShare },
+      ]
+    : [
+        { persona: a, share: 1 - winnerShare },
+        { persona: b, share: winnerShare },
+      ];
+}
+
+const individual = (persona: Persona): WeightedPersona[] => [
+  { persona, share: 1 },
+];
+
+function candidateFor(
+  product: CatalogueProduct,
+  probability: number,
+  people: WeightedPersona[],
+  basket: CatalogueProduct[],
+  runningTotal: number,
+  settings: ModelSettings,
+): Candidate {
+  return {
+    product,
+    probability,
+    reasons: reasonsFor(people, product, { basket, runningTotal }, settings),
+  };
 }
 
 export function simulateMission(
@@ -175,113 +254,117 @@ export function simulateMission(
   b: Persona,
   opts: MissionOptions,
 ): MissionResult {
-  const settings = applyInterventions(opts.settings, opts.interventions ?? []);
-  const rng = streamsFor(opts.seed, WALKTHROUGH_NIGHT);
-  const shortlistSize = MODEL_CONFIG.suggestionsPerShopper;
-  const decidedJointly = settings.decisionStyle === "joint";
+  const settings = settingsFor(opts);
+  const rng = streamsFor(opts.seed, 0);
   const rounds: RoundResult[] = [];
+  const courseDecisions: MissionResult["courseDecisions"] = [];
+  const unavailableCourses: Course[] = [];
+  const basket: CatalogueProduct[] = [];
   let runningTotal = 0;
 
   settings.courses.forEach((course, index) => {
-    const products = poolFor(course, settings);
-    if (products.length === 0) return;
+    const probability = courseParticipationProbability(course, a, b, settings);
+    const selected = rng.participation() < probability;
+    courseDecisions.push({
+      course,
+      selected,
+      probability,
+      reason: courseDecisionReason(course, selected, a, b),
+    });
+    if (!selected) return;
 
-    // Every course draws from all three streams whether or not it ends up
-    // played, so the streams stay aligned when participation changes.
-    const { throws, winner } = playRound(rng.throws, settings);
-    const participationDraw = rng.participation();
+    const products = poolFor(course, settings);
+    if (products.length === 0) {
+      unavailableCourses.push(course);
+      return;
+    }
+
+    const { throws, winner } = playRound(rng.throws);
     const productDraw = rng.products();
 
-    const deciders = decidersFor(a, b, winner, settings);
-    const setA = considerationSet(
-      decidedJointly ? deciders : [a],
-      products,
-      runningTotal,
-      settings.budget,
-      settings,
-    );
-    const setB = decidedJointly
-      ? setA
-      : considerationSet([b], products, runningTotal, settings.budget, settings);
-    const decidingSet = decidedJointly ? setA : winner === "a" ? setA : setB;
-
-    if (!rollsCourse(course, participationDraw, settings)) return;
-    if (!canAffordCourse(course, decidingSet, runningTotal, settings)) return;
-
-    const suggestions: Record<ShopperId, Candidate[]> = {
-      a: topCandidates(decidedJointly ? deciders : [a], setA, settings, shortlistSize),
-      b: topCandidates(decidedJointly ? deciders : [b], setB, settings, shortlistSize),
-    };
+    const context = { basket, runningTotal };
+    const people = decisionWeights(a, b, winner, settings);
+    const decidingSet = considerationSet(people, products, context, settings);
+    const setA = considerationSet(individual(a), products, context, settings);
+    const setB = considerationSet(individual(b), products, context, settings);
 
     const pickedIndex = sampleIndex(decidingSet.probabilities, productDraw);
     const product = decidingSet.products[pickedIndex];
-    const chosen: Candidate = {
+    const chosen = candidateFor(
       product,
-      probability: decidingSet.probabilities[pickedIndex],
-      reasons: reasonsFor(deciders, product, settings),
-    };
-
-    // The shelf highlights the chosen card, so it has to be on screen even when
-    // the sample lands outside the shortlist the UI shows.
-    for (const shopper of decidedJointly
-      ? (["a", "b"] as ShopperId[])
-      : [winner]) {
-      const shortlist = suggestions[shopper];
-      const listed = shortlist.some(
-        (candidate) => candidate.product.id === product.id,
-      );
-      suggestions[shopper] = listed
-        ? shortlist.map((candidate) =>
-            candidate.product.id === product.id ? chosen : candidate,
+      decidingSet.probabilities[pickedIndex],
+      people,
+      basket,
+      runningTotal,
+      settings,
+    );
+    const alternativeIndex = decidingSet.products.findIndex(
+      (item) => item.id !== product.id,
+    );
+    const closeAlternative =
+      alternativeIndex >= 0
+        ? candidateFor(
+            decidingSet.products[alternativeIndex],
+            decidingSet.probabilities[alternativeIndex],
+            people,
+            basket,
+            runningTotal,
+            settings,
           )
-        : [...shortlist.slice(0, shortlistSize - 1), chosen];
+        : null;
+
+    const suggestions = {
+      a: topCandidates(individual(a), setA, context, settings, MODEL_CONFIG.suggestionsPerShopper),
+      b: topCandidates(individual(b), setB, context, settings, MODEL_CONFIG.suggestionsPerShopper),
+    };
+    const winnerList = suggestions[winner];
+    if (!winnerList.some((entry) => entry.product.id === product.id)) {
+      suggestions[winner] = [...winnerList.slice(0, -1), chosen];
     }
 
-    runningTotal += product.price;
+    const additions = additionsFor(course, product);
+    const picked = [product, ...additions.map((item) => item.product)];
+    basket.push(...picked);
+    runningTotal += picked.reduce((sum, item) => sum + item.price, 0);
+    const influence = winnerInfluence(settings);
     rounds.push({
       index,
       course,
       throws,
       winner,
-      decidedJointly,
+      decidedJointly: influence <= 0.55,
+      winnerInfluence: influence,
       suggestions,
       chosen,
+      additions,
+      closeAlternative,
       runningTotal,
     });
   });
 
-  return { rounds, total: runningTotal };
+  return { rounds, courseDecisions, total: runningTotal, unavailableCourses };
 }
 
-function emptyTopByCourse(): Record<
-  Course,
-  { product: CatalogueProduct; share: number }[]
-> {
-  const result = {} as Record<
-    Course,
-    { product: CatalogueProduct; share: number }[]
-  >;
+function emptyTopByCourse(): SimulationSummary["topByCourse"] {
+  const result = {} as SimulationSummary["topByCourse"];
   for (const course of MISSION_COURSES) result[course] = [];
   return result;
 }
 
-function buildHistogram(totals: number[]): { bucket: string; count: number }[] {
+function buildHistogram(totals: number[]) {
   if (totals.length === 0) return [];
-
   const { bucketWidth, targetBuckets } = MODEL_CONFIG.histogram;
   const min = Math.floor(Math.min(...totals) / bucketWidth) * bucketWidth;
-  const max = Math.ceil(Math.max(...totals) / bucketWidth) * bucketWidth;
+  const maxRaw = Math.ceil(Math.max(...totals) / bucketWidth) * bucketWidth;
+  const max = Math.max(maxRaw, min + bucketWidth);
   const width = Math.max(
     bucketWidth,
     Math.ceil((max - min) / targetBuckets / bucketWidth) * bucketWidth,
   );
-
   const buckets: { bucket: string; count: number }[] = [];
   for (let start = min; start < max; start += width) {
     buckets.push({ bucket: `£${start}–${start + width}`, count: 0 });
   }
-  if (buckets.length === 0) return [];
-
   for (const total of totals) {
     const slot = Math.min(Math.floor((total - min) / width), buckets.length - 1);
     buckets[slot].count += 1;
@@ -289,29 +372,31 @@ function buildHistogram(totals: number[]): { bucket: string; count: number }[] {
   return buckets;
 }
 
+function increment(map: Map<string, number>, key: string) {
+  map.set(key, (map.get(key) ?? 0) + 1);
+}
+
 export function runMonteCarlo(
   a: Persona,
   b: Persona,
   opts: MonteCarloOptions,
 ): SimulationSummary {
-  const { seed } = opts;
-  const settings = applyInterventions(opts.settings, opts.interventions ?? []);
+  const settings = settingsFor(opts);
   const pools = new Map<Course, CatalogueProduct[]>();
   for (const course of settings.courses) {
     const pool = poolFor(course, settings);
     if (pool.length > 0) pools.set(course, pool);
   }
   const courses = [...pools.keys()];
-
   const totals: number[] = [];
-  const counts = new Map<Course, Map<string, number>>();
+  const productCounts = new Map<Course, Map<string, number>>();
   const spend = new Map<Course, number>();
-  /** Nights the couple reached for the course, before the budget gate. */
   const rolled = new Map<Course, number>();
-  /** Nights the course was played and something actually went in the basket. */
   const bought = new Map<Course, number>();
+  const pairCounts = new Map<string, number>();
+  const basketCounts = new Map<string, number>();
   for (const course of courses) {
-    counts.set(course, new Map());
+    productCounts.set(course, new Map());
     spend.set(course, 0);
     rolled.set(course, 0);
     bought.set(course, 0);
@@ -321,153 +406,161 @@ export function runMonteCarlo(
   let totalPicks = 0;
   let throwsFingerprint = 0;
   let lopsidedNights = 0;
+  let overBudgetNights = 0;
+  let totalOverspend = 0;
 
   for (let night = 0; night < opts.runs; night += 1) {
-    // Common random numbers: the streams depend only on (seed, night), so two
-    // runs that differ by an intervention replay the same throws and flips and
-    // the difference between them is the intervention alone.
-    const rng = streamsFor(seed, night);
+    const rng = streamsFor(opts.seed, night);
+    const basket: CatalogueProduct[] = [];
     let runningTotal = 0;
-    // Only rounds that were actually played count towards a lopsided night —
-    // a skipped course has no visible winner in the sample either.
     const wins: Record<ShopperId, number> = { a: 0, b: 0 };
 
     for (const course of courses) {
       const products = pools.get(course);
       if (!products) continue;
-
-      const { throws, winner } = playRound(rng.throws, settings);
       const participationDraw = rng.participation();
+      const probability = courseParticipationProbability(course, a, b, settings);
+      if (participationDraw >= probability) continue;
+
+      const { throws, winner } = playRound(rng.throws);
       const productDraw = rng.products();
-
       throwsFingerprint = fingerprintThrows(throwsFingerprint, throws);
-
-      const deciders = decidersFor(a, b, winner, settings);
-      const set = considerationSet(
-        deciders,
-        products,
-        runningTotal,
-        settings.budget,
-        settings,
-      );
-
-      if (!rollsCourse(course, participationDraw, settings)) continue;
       rolled.set(course, (rolled.get(course) ?? 0) + 1);
 
-      if (!canAffordCourse(course, set, runningTotal, settings)) continue;
-
+      const people = decisionWeights(a, b, winner, settings);
+      const set = considerationSet(
+        people,
+        products,
+        { basket, runningTotal },
+        settings,
+      );
       const product = set.products[sampleIndex(set.probabilities, productDraw)];
-      bought.set(course, (bought.get(course) ?? 0) + 1);
+      if (!product) continue;
+
       wins[winner] += 1;
-
-      runningTotal += product.price;
-      spend.set(course, (spend.get(course) ?? 0) + product.price);
-
-      const courseCounts = counts.get(course);
-      if (courseCounts) {
-        courseCounts.set(product.id, (courseCounts.get(product.id) ?? 0) + 1);
+      bought.set(course, (bought.get(course) ?? 0) + 1);
+      const additions = additionsFor(course, product);
+      const picked = [product, ...additions.map((item) => item.product)];
+      const courseSpend = picked.reduce((sum, item) => sum + item.price, 0);
+      runningTotal += courseSpend;
+      spend.set(course, (spend.get(course) ?? 0) + courseSpend);
+      basket.push(...picked);
+      const counts = productCounts.get(course);
+      if (counts) counts.set(product.id, (counts.get(product.id) ?? 0) + 1);
+      for (const item of picked) {
+        if (item.attributes.premium >= MODEL_CONFIG.premiumThreshold) premiumPicks += 1;
+        totalPicks += 1;
       }
-
-      if (product.attributes.premium >= MODEL_CONFIG.premiumThreshold) {
-        premiumPicks += 1;
-      }
-      totalPicks += 1;
     }
 
-    if (Math.abs(wins.a - wins.b) >= MODEL_CONFIG.lopsidedWinGap) {
-      lopsidedNights += 1;
+    if (Math.abs(wins.a - wins.b) >= MODEL_CONFIG.lopsidedWinGap) lopsidedNights += 1;
+    const overspend = Math.max(0, runningTotal - settings.budget);
+    if (overspend > 0) {
+      overBudgetNights += 1;
+      totalOverspend += overspend;
     }
     totals.push(runningTotal);
+
+    for (let i = 0; i < basket.length; i += 1) {
+      for (let j = i + 1; j < basket.length; j += 1) {
+        increment(pairCounts, [basket[i].id, basket[j].id].sort().join("|"));
+      }
+    }
+    increment(basketCounts, basket.map((product) => product.id).join("|"));
   }
 
   const runs = Math.max(opts.runs, 1);
   const sorted = [...totals].sort((x, y) => x - y);
-  const median = sorted.length
-    ? sorted.length % 2 === 1
-      ? sorted[(sorted.length - 1) / 2]
-      : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-    : 0;
-
+  const median = sorted.length % 2
+    ? sorted[(sorted.length - 1) / 2]
+    : ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2;
   const topByCourse = emptyTopByCourse();
   for (const course of courses) {
-    const products = pools.get(course) ?? [];
-    const courseCounts = counts.get(course) ?? new Map<string, number>();
-    topByCourse[course] = [...courseCounts.entries()]
-      .map(([id, count]) => ({
-        product: products.find((product) => product.id === id),
-        share: count / runs,
-      }))
-      .filter(
-        (entry): entry is { product: CatalogueProduct; share: number } =>
-          entry.product !== undefined,
-      )
+    const counts = productCounts.get(course) ?? new Map();
+    topByCourse[course] = [...counts.entries()]
+      .map(([id, count]) => ({ product: getProduct(id), share: count / runs }))
+      .filter((entry): entry is { product: CatalogueProduct; share: number } => Boolean(entry.product))
       .sort((x, y) => y.share - x.share)
       .slice(0, MODEL_CONFIG.topProductsPerCourse);
   }
 
-  const rateFrom = (tally: Map<Course, number>) => {
-    const rates = {} as Record<Course, number>;
-    for (const course of MISSION_COURSES) {
-      rates[course] = (tally.get(course) ?? 0) / runs;
-    }
-    return rates;
-  };
+  const rateFrom = (tally: Map<Course, number>) =>
+    Object.fromEntries(
+      MISSION_COURSES.map((course) => [course, (tally.get(course) ?? 0) / runs]),
+    ) as Record<Course, number>;
+
+  const commonPairings = [...pairCounts.entries()]
+    .sort((aEntry, bEntry) => bEntry[1] - aEntry[1])
+    .slice(0, 6)
+    .map(([key, count]) => {
+      const [aId, bId] = key.split("|");
+      const first = getProduct(aId);
+      const second = getProduct(bId);
+      return first && second ? { products: [first, second] as [CatalogueProduct, CatalogueProduct], share: count / runs } : null;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  const commonBaskets = [...basketCounts.entries()]
+    .sort((aEntry, bEntry) => bEntry[1] - aEntry[1])
+    .slice(0, 5)
+    .map(([key, count]) => ({
+      products: key.split("|").map(getProduct).filter((product): product is CatalogueProduct => Boolean(product)),
+      share: count / runs,
+    }));
 
   return {
     runs: opts.runs,
     averageBasket: totals.reduce((sum, value) => sum + value, 0) / runs,
     medianBasket: median,
+    minBasket: sorted[0] ?? 0,
+    maxBasket: sorted[sorted.length - 1] ?? 0,
+    overBudgetRate: overBudgetNights / runs,
+    averageOverspend: overBudgetNights ? totalOverspend / overBudgetNights : 0,
     histogram: buildHistogram(totals),
     topByCourse,
     categorySpend: courses.map((course) => ({
       course,
       spend: (spend.get(course) ?? 0) / runs,
     })),
+    commonPairings,
+    commonBaskets,
     courseParticipation: rateFrom(rolled),
     attachRates: rateFrom(bought),
-    premiumShare: totalPicks > 0 ? premiumPicks / totalPicks : 0,
+    premiumShare: totalPicks ? premiumPicks / totalPicks : 0,
     lopsidedShare: lopsidedNights / runs,
     throwsFingerprint,
   };
 }
 
-/**
- * Runs the same nights twice — once as they are, once with one parameter moved —
- * and reports the difference. Both runs share a seed, so they replay identical
- * throws and identical coin flips; whatever separates the two baskets is the
- * intervention and nothing else.
- *
- * The uplift is never written down anywhere. It is only ever the subtraction
- * below, and `intervention.assumption` travels with it so the number is always
- * shown next to the assumption it depends on.
- */
 export function compareIntervention(
   a: Persona,
   b: Persona,
   opts: CompareInterventionOptions,
 ): InterventionComparison {
-  const { seed, runs, intervention } = opts;
-
-  // Both sides must play the same courses, so the baseline plays the targeted
-  // course too — at its observed rate.
-  const settings = withInterventionCourses(opts.settings, [intervention]);
-
-  const baseline = runMonteCarlo(a, b, { seed, runs, settings });
-  const withIntervention = runMonteCarlo(a, b, {
-    seed,
-    runs,
-    settings,
-    interventions: [intervention],
+  const baselineSettings: ModelSettings = {
+    ...opts.settings,
+    aisleExperiment: { ...opts.settings.aisleExperiment, enabled: false },
+  };
+  const proposalSettings: ModelSettings = {
+    ...opts.settings,
+    aisleExperiment: { ...opts.settings.aisleExperiment, enabled: true },
+  };
+  const baseline = runMonteCarlo(a, b, {
+    seed: opts.seed,
+    runs: opts.runs,
+    settings: baselineSettings,
   });
-
+  const withIntervention = runMonteCarlo(a, b, {
+    seed: opts.seed,
+    runs: opts.runs,
+    settings: proposalSettings,
+  });
   const upliftAbs = withIntervention.averageBasket - baseline.averageBasket;
-
   return {
-    intervention,
+    intervention: opts.intervention,
     baseline,
     withIntervention,
     upliftAbs,
-    upliftPct:
-      baseline.averageBasket > 0 ? upliftAbs / baseline.averageBasket : 0,
+    upliftPct: baseline.averageBasket ? upliftAbs / baseline.averageBasket : 0,
   };
 }

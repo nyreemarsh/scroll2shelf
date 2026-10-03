@@ -37,7 +37,7 @@ export function ProductCard({ candidate, chosen, layoutId }: ProductCardProps) {
           alt={product.name}
           fill
           sizes="(max-width: 768px) 50vw, 240px"
-          className="object-cover"
+          className="object-contain p-1"
         />
         {isChosen ? (
           <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-md bg-plum px-2 py-1 text-[11px] font-semibold text-popcorn">
@@ -51,6 +51,10 @@ export function ProductCard({ candidate, chosen, layoutId }: ProductCardProps) {
         <h4 className="text-sm leading-snug font-medium text-plum">
           {product.name}
         </h4>
+
+        <p className="mt-1 text-[11px] font-medium tracking-wide text-cerulean uppercase">
+          {product.aisle}
+        </p>
 
         {reasons[0] ? (
           <p className="mt-1.5 text-xs text-muted">{reasons[0].label}</p>

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { CakeSlice, Sparkles } from "lucide-react";
 import type { Finding } from "@/lib/types";
 import { ArrowButton } from "@/components/ui/ArrowButton";
@@ -75,13 +76,27 @@ export function LatestFindingCard({ finding }: { finding: Finding }) {
         </div>
 
         <div className="flex flex-col rounded-card border border-line bg-white p-5">
-          <div className="relative flex min-h-[200px] flex-1 items-center justify-center overflow-hidden rounded-lg bg-plum">
-            <DotPattern className="opacity-20" />
-            <CakeSlice
-              className="relative size-16 text-popcorn"
-              strokeWidth={1.1}
-            />
-            <span className="eyebrow absolute top-4 left-4 text-cream/45">
+          <div className="relative flex min-h-[260px] flex-1 items-center justify-center overflow-hidden rounded-lg bg-sand/70">
+            {finding.product.image ? (
+              <Image
+                src={finding.product.image}
+                alt={finding.product.name}
+                fill
+                priority
+                sizes="(max-width: 1024px) 100vw, 360px"
+                className="object-contain p-5"
+              />
+            ) : (
+              <>
+                <div className="absolute inset-0 bg-plum" />
+                <DotPattern className="opacity-20" />
+                <CakeSlice
+                  className="relative size-16 text-popcorn"
+                  strokeWidth={1.1}
+                />
+              </>
+            )}
+            <span className="eyebrow absolute top-4 left-4 rounded-full bg-white/90 px-2.5 py-1 text-plum shadow-sm">
               {finding.product.category}
             </span>
           </div>

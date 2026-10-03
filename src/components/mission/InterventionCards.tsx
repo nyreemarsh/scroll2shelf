@@ -23,7 +23,7 @@ export function InterventionCards({
   const ranked = [...comparisons].sort((a, b) => b.upliftAbs - a.upliftAbs);
 
   return (
-    <div className="grid gap-5 md:grid-cols-2">
+    <div className="grid gap-5">
       {ranked.map((comparison, index) => {
         const { intervention, baseline, withIntervention, upliftAbs, upliftPct } =
           comparison;
@@ -75,7 +75,7 @@ export function InterventionCards({
                 strokeWidth={2}
               />
               <p className="text-xs leading-relaxed text-muted">
-                {intervention.assumption}. Measured over{" "}
+                {intervention.assumption}. Modelled over{" "}
                 {runs.toLocaleString("en-GB")} paired runs on the same seed, so
                 both sides played identical throws.
               </p>

@@ -6,6 +6,7 @@
     "url": "https://www.marksandspencer.com/stores/pantheon-173-oxford-street-2480"
   },
   "pricesCapturedAt": "2026-10-03T12:36:49+00:00",
+  "sourceCsv": "mands_food_products_with_course_and_prices.csv",
   "rawProducts": 6709,
   "catalogueProducts": 240,
   "perCourse": {

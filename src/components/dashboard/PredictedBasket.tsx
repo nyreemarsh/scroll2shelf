@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { PredictedBasket as PredictedBasketData } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -36,6 +37,17 @@ export function PredictedBasket({ basket }: { basket: PredictedBasketData }) {
                 item.highlight ? "border-popcorn" : "border-line-strong",
               )}
             />
+            {item.product.image ? (
+              <span className="relative size-12 shrink-0 overflow-hidden rounded-md bg-sand/70">
+                <Image
+                  src={item.product.image}
+                  alt=""
+                  fill
+                  sizes="48px"
+                  className="object-contain p-1"
+                />
+              </span>
+            ) : null}
             <div className="min-w-0 flex-1">
               <p className="eyebrow text-muted">{item.course}</p>
               <p className="mt-1 truncate text-sm font-medium text-plum">

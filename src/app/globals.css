@@ -22,7 +22,8 @@
   --color-line: rgba(61, 45, 46, 0.1);
   --color-line-strong: rgba(61, 45, 46, 0.22);
 
-  --font-sans: var(--font-inclusive-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
 
   --radius-card: 14px;
 }

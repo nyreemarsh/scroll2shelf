@@ -9,6 +9,7 @@ export interface Choice {
   description?: string;
   /** Right-aligned supporting figure, usually the evidence behind the option. */
   meta?: string;
+  disabled?: boolean;
 }
 
 interface ChoiceListProps {
@@ -38,10 +39,13 @@ export function ChoiceList({
             type="button"
             role="radio"
             aria-checked={selected}
+            disabled={choice.disabled}
             onClick={() => onChange(choice.id)}
             className={cn(
               "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-              selected
+              choice.disabled
+                ? "cursor-not-allowed border-line bg-sand/35 opacity-45"
+                : selected
                 ? "border-popcorn-200 bg-popcorn-100"
                 : "border-line bg-white hover:border-line-strong",
             )}

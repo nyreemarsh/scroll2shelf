@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Finding, ModelContribution } from "@/lib/types";
 import { ContributionBars } from "@/components/charts/ContributionBars";
 import { Card } from "@/components/ui/Card";
@@ -37,9 +38,22 @@ export function ModelExplanation({
 
         <div className="rounded-lg border border-cerulean-100 bg-cerulean-50 p-5">
           <p className="eyebrow text-plum/65">Model output</p>
-          <p className="mt-3 text-base font-semibold text-plum">
-            {finding.product.name}
-          </p>
+          <div className="mt-3 flex items-center gap-3">
+            {finding.product.image ? (
+              <span className="relative size-16 shrink-0 overflow-hidden rounded-md bg-white">
+                <Image
+                  src={finding.product.image}
+                  alt=""
+                  fill
+                  sizes="64px"
+                  className="object-contain p-1"
+                />
+              </span>
+            ) : null}
+            <p className="text-base font-semibold text-plum">
+              {finding.product.name}
+            </p>
+          </div>
           {selection ? (
             <>
               <p className="mt-4 text-4xl font-semibold tracking-tight text-plum tabular-nums">

@@ -12,6 +12,7 @@ import type {
   SimulationPreview,
   TimeRange,
 } from "@/lib/types";
+import { getProduct } from "@/lib/catalogue";
 
 export const retailer: Retailer = {
   id: "marks-and-spencer",
@@ -27,42 +28,56 @@ export const timeRanges: TimeRange[] = [
 
 export const dataFreshness = "Updated 12 minutes ago";
 
+function featuredProduct(
+  id: string,
+  catalogueId: string,
+  category: string,
+  fallbackDescription: string,
+): Product {
+  const product = getProduct(catalogueId);
+  if (!product) throw new Error(`Unknown catalogue product: ${catalogueId}`);
+
+  return {
+    id,
+    name: product.name,
+    category,
+    price: product.price,
+    description: product.description ?? fallbackDescription,
+    image: product.image,
+  };
+}
+
 export const products: Product[] = [
-  {
-    id: "burrata-tomatoes",
-    name: "Burrata & Tomatoes",
-    category: "Starter",
-    price: 5.5,
-    description: "Creamy burrata with heritage tomatoes and basil oil.",
-  },
-  {
-    id: "steak-peppercorn",
-    name: "Steak & Peppercorn Sauce",
-    category: "Main",
-    price: 12.0,
-    description: "Two sirloin steaks with a peppercorn sauce.",
-  },
-  {
-    id: "tiramisu",
-    name: "Tiramisu",
-    category: "Dessert",
-    price: 4.75,
-    description: "Coffee-soaked sponge layered with mascarpone cream.",
-  },
-  {
-    id: "prosecco",
-    name: "Prosecco",
-    category: "Drink",
-    price: 8.0,
-    description: "Dry sparkling wine, chilled.",
-  },
-  {
-    id: "chocolate-truffles",
-    name: "Chocolate Truffles",
-    category: "Wildcard",
-    price: 3.5,
-    description: "Dark chocolate truffles, shareable box.",
-  },
+  featuredProduct(
+    "burrata-tomatoes",
+    "60482514",
+    "Starter",
+    "Italian burrata for a simple shared starter.",
+  ),
+  featuredProduct(
+    "steak-peppercorn",
+    "60615850",
+    "Main",
+    "Scotch beef sirloin steak for the main course.",
+  ),
+  featuredProduct(
+    "tiramisu",
+    "60368682",
+    "Dessert",
+    "Coffee-soaked sponge layered with mascarpone cream.",
+  ),
+  featuredProduct(
+    "prosecco",
+    "60052706",
+    "Drink",
+    "Dry Italian sparkling wine, ready to chill.",
+  ),
+  featuredProduct(
+    "chocolate-truffles",
+    "60047277",
+    "Wildcard",
+    "Swiss dark chocolate truffles for sharing.",
+  ),
 ];
 
 const productById = (id: string): Product => {
@@ -115,7 +130,11 @@ export const latestFinding: Finding = {
   ],
   metrics: [
     { id: "selection", value: "31%", label: "predicted selection" },
-    { id: "price", value: "£4.75", label: "average price" },
+    {
+      id: "price",
+      value: `£${productById("tiramisu").price.toFixed(2)}`,
+      label: "current price",
+    },
     { id: "attach", value: "74%", label: "dessert attach rate" },
   ],
   product: productById("tiramisu"),

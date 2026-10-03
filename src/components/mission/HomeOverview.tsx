@@ -11,7 +11,7 @@ import {
   retailerOpportunities,
   timeRanges,
 } from "@/data/mockData";
-import { moodById, type SimulationParameters } from "@/lib/simulation/parameters";
+import type { SimulationParameters } from "@/lib/simulation/parameters";
 import type { SimulationSummary } from "@/lib/simulation/types";
 import { personaById } from "@/data/personas";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
@@ -103,7 +103,6 @@ function RunInsights({
   const { summary, parameters, courses } = run;
   const shopperA = personaById(parameters.shopperA);
   const shopperB = personaById(parameters.shopperB);
-  const mood = moodById(parameters.mood);
 
   return (
     <section>
@@ -127,11 +126,8 @@ function RunInsights({
         <Chip tone="popcorn">
           {shopperA.name} vs {shopperB.name}
         </Chip>
-        <Chip tone="cerulean">{mood.label}</Chip>
+        <Chip tone="cerulean">RPS date night</Chip>
         <Chip>{formatBudget(parameters.budget)} budget</Chip>
-        <Chip>{Math.round(parameters.trendExposure * 100)}% trend exposure</Chip>
-        {parameters.dealHunting ? <Chip>Deal hunting</Chip> : null}
-        {parameters.dietary ? <Chip>{parameters.dietary}</Chip> : null}
       </div>
 
       <Card className="mb-5 grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
@@ -148,8 +144,8 @@ function RunInsights({
           decimals={2}
         />
         <HomeKpi
-          label="premium product share"
-          value={summary.premiumShare * 100}
+          label="shops over soft budget"
+          value={summary.overBudgetRate * 100}
           suffix="%"
         />
         <HomeKpi label="simulations run" value={summary.runs} />

@@ -107,17 +107,10 @@ export const MODEL_CONFIG = {
 
   /**
    * DATA — share of the 22 TikTok posts that played each course
-   * (`evidence.courseParticipation`). Used directly as the per-night
-   * probability that a course gets played at all.
+   * (`evidence.courseParticipation`). This is the prior for the persona-led
+   * course decision; visible preferences can raise or lower it.
    */
   courseParticipation: evidence.courseParticipation as Record<Course, number>,
-
-  /**
-   * DATA — these three were played in every post in the sample, so they are
-   * never rolled for. Listing them makes the 1.0 above explicit rather than
-   * leaving it to a probability that happens to always pass.
-   */
-  alwaysPlayedCourses: ["starter", "main", "dessert"] as Course[],
 
   /**
    * ASSUMPTION — the uptake each intervention is assumed to reach. The uplift

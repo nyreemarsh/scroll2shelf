@@ -1,18 +1,19 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Pause, Play, SkipForward } from "lucide-react";
 import { COURSE_LABEL } from "@/lib/simulation/courses";
 import type {
   Candidate,
+  CourseDecision,
   MissionResult,
   Persona,
   RoundResult,
 } from "@/lib/simulation/types";
 import { ArrowButton } from "@/components/ui/ArrowButton";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { cn, formatPrice } from "@/lib/utils";
+import { formatPrice } from "@/lib/utils";
 import { BasketTray } from "./BasketTray";
 import { ProductCard } from "./ProductCard";
 import { RoundTheatre } from "./RoundTheatre";
@@ -20,12 +21,12 @@ import { RoundTheatre } from "./RoundTheatre";
 /** How many of the winner's ranked picks the shelf shows. */
 const SHELF_SIZE = 4;
 const HANDS_MS = 1600;
-const SHELF_MS = 2800;
 
 interface SimulateStepProps {
   mission: MissionResult;
   shopperA: Persona;
   shopperB: Persona;
+  budget: number;
   onScaleUp: () => void;
 }
 
@@ -43,6 +44,7 @@ export function SimulateStep({
   mission,
   shopperA,
   shopperB,
+  budget,
   onScaleUp,
 }: SimulateStepProps) {
   const reduceMotion = useReducedMotion();
@@ -50,42 +52,22 @@ export function SimulateStep({
 
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const [playing, setPlaying] = useState(true);
-  const [speed, setSpeed] = useState(1);
 
   const done = index >= rounds.length;
   const round = done ? null : rounds[index];
 
   useEffect(() => {
-    if (done || !playing) return;
-
-    const delay = reduceMotion
-      ? 400
-      : (revealed ? SHELF_MS : HANDS_MS) / speed;
+    if (done || revealed) return;
 
     const timer = setTimeout(() => {
-      if (revealed) {
-        setIndex((current) => current + 1);
-        setRevealed(false);
-      } else {
-        setRevealed(true);
-      }
-    }, delay);
+      setRevealed(true);
+    }, reduceMotion ? 400 : HANDS_MS);
 
     return () => clearTimeout(timer);
-  }, [done, playing, revealed, speed, reduceMotion, index]);
-
-  const skipToBasket = () => {
-    setPlaying(false);
-    setIndex(rounds.length);
-    setRevealed(false);
-  };
+  }, [done, revealed, reduceMotion, index]);
 
   const nextRound = () => {
-    if (!revealed) {
-      setRevealed(true);
-      return;
-    }
+    if (!revealed) return;
     setIndex((current) => current + 1);
     setRevealed(false);
   };
@@ -95,20 +77,19 @@ export function SimulateStep({
       <SectionHeading
         eyebrow="Step 2"
         title="One simulated shop"
-        description="Rock paper scissors decides who picks each course, then the model ranks the shelf for whoever won."
+        description="The personas first decide which courses fit this shop. Rock paper scissors then decides who chooses each selected course, and every result pauses until you continue."
         action={
           !done ? (
             <Controls
-              playing={playing}
-              speed={speed}
-              onTogglePlay={() => setPlaying((value) => !value)}
               onNext={nextRound}
-              onSkip={skipToBasket}
-              onSpeed={() => setSpeed((value) => (value === 1 ? 2 : 1))}
+              disabled={!revealed}
+              isLastRound={index === rounds.length - 1}
             />
           ) : null
         }
       />
+
+      <CoursePlan decisions={mission.courseDecisions} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
         <div className="min-w-0 space-y-5">
@@ -138,6 +119,12 @@ export function SimulateStep({
                   revealed={revealed}
                 />
 
+                {revealed ? (
+                  <p className="text-center text-sm text-muted">
+                    Paused after this round. Select Next when you&apos;re ready to continue.
+                  </p>
+                ) : null}
+
                 <AnimatePresence>
                   {revealed ? (
                     <motion.div
@@ -153,16 +140,50 @@ export function SimulateStep({
                         shelf at {" "}
                         <span className="font-medium text-plum">M&S</span>
                       </p>
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                        {shelfFor(round).map((candidate) => (
-                          <ProductCard
-                            key={candidate.product.id}
-                            candidate={candidate}
-                            chosen={
-                              candidate.product.id === round.chosen.product.id
-                            }
-                          />
+                      <div className="space-y-4">
+                        {Object.entries(
+                          Object.groupBy(
+                            shelfFor(round),
+                            (candidate) => candidate.product.aisle,
+                          ),
+                        ).map(([aisle, candidates]) => (
+                          <div key={aisle}>
+                            <p className="eyebrow mb-2 text-cerulean">{aisle}</p>
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                              {candidates?.map((candidate) => (
+                                <ProductCard
+                                  key={candidate.product.id}
+                                  candidate={candidate}
+                                  chosen={candidate.product.id === round.chosen.product.id}
+                                />
+                              ))}
+                            </div>
+                          </div>
                         ))}
+                        {round.additions.length > 0 ? (
+                          <div className="rounded-lg border border-line bg-white px-4 py-3 text-xs text-plum">
+                            <p className="font-semibold">Added to make the course complete for two</p>
+                            {round.additions.map((item, index) => (
+                              <div key={`${item.product.id}-${index}`} className="mt-2 flex items-center gap-2 text-muted">
+                                <span className="relative size-9 shrink-0 overflow-hidden rounded-md bg-sand">
+                                  <Image src={item.product.image} alt="" fill sizes="36px" className="object-contain p-0.5" />
+                                </span>
+                                <p>{item.product.name} · {item.reason} · {formatPrice(item.product.price)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {round.closeAlternative ? (
+                          <div className="flex items-center gap-2 rounded-lg bg-sand/60 px-3 py-2 text-xs text-muted">
+                            <span className="relative size-9 shrink-0 overflow-hidden rounded-md bg-white">
+                              <Image src={round.closeAlternative.product.image} alt="" fill sizes="36px" className="object-contain p-0.5" />
+                            </span>
+                            <p>
+                              Close alternative: <span className="font-medium text-plum">{round.closeAlternative.product.name}</span>
+                              {round.closeAlternative.reasons[0] ? ` · ${round.closeAlternative.reasons[0].label}` : ""}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
                     </motion.div>
                   ) : null}
@@ -180,16 +201,36 @@ export function SimulateStep({
                   {formatPrice(mission.total)}
                 </p>
                 <p className="mx-auto mt-3 max-w-sm text-sm text-muted">
-                  One modelled shop across {rounds.length}{" "}
-                  {rounds.length === 1 ? "course" : "courses"}. Run it thousands
-                  of times to see which products hold up.
+                  One modelled shop with {rounds.length}{" "}
+                  {rounds.length === 1 ? "selected course" : "selected courses"}.
+                  The personas were free to skip the rest. Run it thousands of
+                  times to see which products hold up.
                 </p>
+                {mission.courseDecisions.some((decision) => !decision.selected) ? (
+                  <p className="mx-auto mt-2 max-w-md text-xs text-muted">
+                    Skipped: {mission.courseDecisions
+                      .filter((decision) => !decision.selected)
+                      .map((decision) => COURSE_LABEL[decision.course])
+                      .join(", ")}.
+                  </p>
+                ) : null}
+                {mission.total > budget ? (
+                  <p className="mt-2 text-sm font-medium text-berry">
+                    This couple went {formatPrice(mission.total - budget)} over their soft budget.
+                  </p>
+                ) : null}
+                {mission.unavailableCourses.length > 0 ? (
+                  <p className="mt-2 text-xs text-muted">
+                    No complete product was available for {mission.unavailableCourses.join(", ")}.
+                  </p>
+                ) : null}
                 <div className="mt-6 flex justify-center">
                   <ArrowButton
                     label="Run 10,000 simulations"
                     onClick={onScaleUp}
                     className="px-5 py-2.5"
                   />
+
                 </div>
               </motion.div>
             )}
@@ -200,6 +241,7 @@ export function SimulateStep({
           <BasketTray
             rounds={rounds}
             resolved={done ? rounds.length : index + (revealed ? 1 : 0)}
+            budget={budget}
           />
         </div>
       </div>
@@ -207,47 +249,64 @@ export function SimulateStep({
   );
 }
 
+function CoursePlan({ decisions }: { decisions: CourseDecision[] }) {
+  return (
+    <div className="rounded-card border border-line bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-plum">Persona-led basket plan</p>
+        <p className="text-xs text-muted">Courses can be selected or skipped</p>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {decisions.map((decision) => (
+          <div
+            key={decision.course}
+            className={`rounded-lg border px-3 py-2.5 ${
+              decision.selected
+                ? "border-cerulean-200 bg-cerulean-50"
+                : "border-line bg-sand/45"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-plum">
+                {COURSE_LABEL[decision.course]}
+              </p>
+              <span className={`text-[11px] font-semibold uppercase tracking-wide ${
+                decision.selected ? "text-cerulean" : "text-muted"
+              }`}>
+                {decision.selected ? "Picking" : "Skipping"}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              {decision.reason} {Math.round(decision.probability * 100)}% fit.
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Controls({
-  playing,
-  speed,
-  onTogglePlay,
   onNext,
-  onSkip,
-  onSpeed,
+  disabled,
+  isLastRound,
 }: {
-  playing: boolean;
-  speed: number;
-  onTogglePlay: () => void;
   onNext: () => void;
-  onSkip: () => void;
-  onSpeed: () => void;
+  disabled: boolean;
+  isLastRound: boolean;
 }) {
   const button =
     "inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-plum transition-colors hover:bg-sand";
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={onTogglePlay} className={button}>
-        {playing ? (
-          <Pause className="size-3.5" strokeWidth={2.2} />
-        ) : (
-          <Play className="size-3.5" strokeWidth={2.2} />
-        )}
-        {playing ? "Pause" : "Play"}
-      </button>
-      <button type="button" onClick={onNext} className={button}>
-        Next
-      </button>
       <button
         type="button"
-        onClick={onSpeed}
-        className={cn(button, speed === 2 && "bg-popcorn-100 border-popcorn-200")}
+        onClick={onNext}
+        disabled={disabled}
+        className={`${button} disabled:cursor-not-allowed disabled:opacity-50`}
       >
-        {speed}×
-      </button>
-      <button type="button" onClick={onSkip} className={button}>
-        <SkipForward className="size-3.5" strokeWidth={2.2} />
-        Skip
+        {isLastRound ? "View basket" : "Next"}
       </button>
     </div>
   );

@@ -11,6 +11,10 @@ Every product a couple was seen buying on TikTok is kept, with its mention count
 as `trendSignal`. The rest of each course is filled with the most date-night-
 relevant products. Behavioural attributes are keyword heuristics on name, brand
 and labels: explainable and cheap, no LLM call per product.
+
+Run `python3 scripts/sync_product_cutouts.py` after this script (or
+`npm run build:catalogue`) to copy the selected products' transparent WebP
+cutouts into `public/images/products/`.
 """
 
 import csv
@@ -19,7 +23,11 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-RAW = ROOT / "data" / "mands_food_products.csv"
+AUTHORITATIVE_RAW = (
+    ROOT.parent / "data" / "mands" / "mands_food_products_with_course_and_prices.csv"
+)
+# The bundled file is byte-for-byte identical, and keeps the repository portable.
+RAW = AUTHORITATIVE_RAW if AUTHORITATIVE_RAW.exists() else ROOT / "data" / "mands_food_products.csv"
 SPOTTED = ROOT.parent / "research" / "output" / "products_spotted.csv"
 OUT = ROOT / "src" / "data" / "products.json"
 META = ROOT / "src" / "data" / "catalogue_meta.json"
@@ -27,6 +35,7 @@ META = ROOT / "src" / "data" / "catalogue_meta.json"
 COURSES = ["starter", "main", "side", "dessert", "drink", "wildcard"]
 MAX_PER_COURSE = 40
 MAX_PER_FAMILY = 5
+FALLBACK_SPOTTED_TOTAL = 118
 
 # Caps near-duplicates (15 steaks, 12 proseccos) so each course has variety.
 FAMILIES = [
@@ -53,6 +62,37 @@ GLOBAL_EXCLUDE = [
 
 def has(text, words):
     return any(w in text for w in words)
+
+
+def number(value, fallback=None):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def aisle_for(row, course):
+    """Collapse M&S' long category trails into a small, legible virtual aisle."""
+    text = f'{row["categories"]} {row["name"]}'.lower()
+    if has(text, ["wine", "champagne", "prosecco", "sparkling", "beer", "cider"]):
+        return "Wine & drinks"
+    if has(text, ["frozen"]):
+        return "Frozen"
+    if has(text, ["bakery", "bread", "cake"]):
+        return "Bakery"
+    if has(text, ["fruit", "vegetable", "salad", "produce"]):
+        return "Fresh produce"
+    if has(text, ["meat", "fish", "poultry", "steak", "salmon"]):
+        return "Meat & fish"
+    if has(text, ["dairy", "cheese", "cream"]):
+        return "Dairy & deli"
+    if has(text, ["ready to cook", "ready meal", "food on the move"]):
+        return "Prepared meals"
+    if course in {"dessert", "wildcard"}:
+        return "Desserts & treats"
+    if course == "drink":
+        return "Wine & drinks"
+    return "Food cupboard"
 
 
 def course_for(row):
@@ -186,6 +226,48 @@ def attributes(row, course):
         0.15 if has(name, ["lasagne", "cottage pie", "fish and chips", "chips", "garlic bread",
                             "cheesecake", "sticky toffee", "chicken", "pizza"]) else 0))), 2)
 
+    protein = number(row["protein_per_100g"])
+    sugar = number(row["sugars_per_100g"])
+    storage = row["storage"].lower()
+    shelf_life = row["shelf_life"].lower()
+
+    convenience = score(text, 0.65 if course in {"dessert", "drink", "wildcard"} else 0.45, plus=[
+        (["ready", "prepared", "heat", "microwave", "oven", "dine in", "pre-cooked"], 0.25),
+        (["salad", "dip", "platter", "pizza", "pasta"], 0.12),
+    ], minus=[(["ingredient", "joint", "whole", "make your own"], 0.25)])
+
+    flavour_intensity = score(text, 0.35 + adventurous * 0.35, plus=[
+        (["chilli", "spicy", "nduja", "gochujang", "harissa", "truffle", "smoked",
+          "garlic", "blue cheese", "curry", "jalapeño", "pepper"], 0.25),
+    ], minus=[(["plain", "classic", "mild", "vanilla"], 0.15)])
+
+    sustainability = score(text + " " + labels.lower(), 0.3, plus=[
+        (["plant kitchen", "vegan", "vegetarian", "organic", "fairtrade", "responsibly",
+          "sustainably", "british", "seasonal"], 0.3),
+    ], minus=[(["beef", "lamb", "single use"], 0.12)])
+
+    low_waste = score(text + " " + storage + " " + shelf_life, 0.35, plus=[
+        (["frozen", "freezable", "resealable", "individual", "single", "mini", "small"], 0.25),
+        (["long life", "store cupboard", "ambient"], 0.2),
+    ], minus=[(["sharing platter", "party", "large", "family"], 0.15)])
+
+    protein_fit = (
+        round(max(0.05, min(0.98, protein / 20)), 2)
+        if protein is not None
+        else score(text, 0.35, plus=[(["chicken", "beef", "steak", "fish", "salmon", "protein",
+                                      "beans", "lentil", "cheese"], 0.4)])
+    )
+    vegetable_fit = score(text, 0.2, plus=[
+        (["vegetable", "salad", "broccoli", "spinach", "tomato", "pepper", "plant kitchen",
+          "beans", "lentil", "mushroom", "greens"], 0.6),
+    ])
+    low_sugar_fit = (
+        round(max(0.05, min(0.98, 1 - sugar / 25)), 2)
+        if sugar is not None
+        else score(text, 0.5, plus=[(["no added sugar", "low sugar"], 0.35)],
+                   minus=[(["chocolate", "caramel", "fudge", "dessert", "cake"], 0.25)])
+    )
+
     return {
         "premium": premium,
         "indulgent": indulgent,
@@ -195,6 +277,13 @@ def attributes(row, course):
         "shareable": shareable,
         "viralPotential": viral,
         "familiar": familiar,
+        "convenience": convenience,
+        "flavourIntensity": flavour_intensity,
+        "sustainability": sustainability,
+        "lowWaste": low_waste,
+        "proteinFit": protein_fit,
+        "vegetableFit": vegetable_fit,
+        "lowSugarFit": low_sugar_fit,
     }
 
 
@@ -210,10 +299,46 @@ def dietary(row):
     return out
 
 
+def allergens(row):
+    """Map inconsistent source spellings onto shopper-facing allergen groups."""
+    out = set()
+    for raw in row["allergens"].split("|"):
+        value = raw.strip().lower()
+        if not value:
+            continue
+        if has(value, ["milk", "buttermilk"]):
+            out.add("milk")
+        elif has(value, ["gluten", "wheat", "barley", "oats", "rye"]):
+            out.add("gluten")
+        elif has(value, ["soy", "soya"]):
+            out.add("soya")
+        elif "sulph" in value:
+            out.add("sulphites")
+        elif value in {"egg", "eggs"}:
+            out.add("eggs")
+        else:
+            out.add(value)
+    return sorted(out)
+
+
 def load_spotted():
     """product_id -> what TikTok showed about it. Missing file means no TikTok data."""
     if not SPOTTED.exists():
-        return {}
+        # Preserve the already-reviewed TikTok links when rebuilding this clone;
+        # the research workspace is intentionally not committed with the app.
+        if not OUT.exists():
+            return {}
+        existing = json.loads(OUT.read_text())
+        return {
+            item["id"]: {
+                "course": item["course"],
+                "trendSignal": item.get("trendSignal", 0),
+                "mentions": item.get("observedMentions", 0),
+                "posts": item.get("observedPosts", []),
+            }
+            for item in existing
+            if item.get("observedMentions", 0) > 0
+        }
     spotted = {}
     with SPOTTED.open() as f:
         for r in csv.DictReader(f):
@@ -238,10 +363,15 @@ def product_entry(row, course, seen):
         "brand": row["brand"] or None,
         "weight": row["weight"] or None,
         "description": row["description"] or None,
+        "categories": [part.strip() for part in row["categories"].split("|") if part.strip()],
+        "aisle": aisle_for(row, course),
         "dietary": dietary(row),
+        "allergens": allergens(row),
+        "allergenDataKnown": bool(row["allergens"].strip()),
         "isNew": "new in" in row["labels"].lower(),
-        # Ask the M&S CDN for a carousel-sized image instead of 1280px.
-        "image": row["image_url"].replace("w_1280", "w_480"),
+        # Served locally after `sync_product_cutouts.py` copies the matching
+        # background-removed source asset into the Next.js public directory.
+        "image": f"/images/products/{Path(row['image_url']).stem}.webp",
         "url": row["source_url"],
         "attributes": attrs,
         "trendSignal": seen["trendSignal"] if seen else 0,
@@ -308,10 +438,15 @@ def main():
             "url": store["price_store_url"],
         },
         "pricesCapturedAt": store["price_captured_at"],
+        "sourceCsv": RAW.name,
         "rawProducts": len(rows),
         "catalogueProducts": len(catalogue),
         "perCourse": {c: sum(1 for p in catalogue if p["course"] == c) for c in COURSES},
-        "tiktokProductsSpotted": sum(1 for _ in csv.DictReader(SPOTTED.open())) if SPOTTED.exists() else 0,
+        "tiktokProductsSpotted": (
+            sum(1 for _ in csv.DictReader(SPOTTED.open()))
+            if SPOTTED.exists()
+            else FALLBACK_SPOTTED_TOTAL
+        ),
         "tiktokProductsInCatalogue": observed_count,
     }
     META.write_text(json.dumps(meta, indent=2) + "\n")

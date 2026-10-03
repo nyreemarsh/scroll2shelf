@@ -10,12 +10,14 @@ interface BasketTrayProps {
   rounds: RoundResult[];
   /** Rounds resolved so far; later rounds stay hidden. */
   resolved: number;
+  budget: number;
 }
 
-export function BasketTray({ rounds, resolved }: BasketTrayProps) {
+export function BasketTray({ rounds, resolved, budget }: BasketTrayProps) {
   const inBasket = rounds.slice(0, resolved);
   const total = inBasket.reduce(
-    (sum, round) => sum + round.chosen.product.price,
+    (sum, round) => sum + round.chosen.product.price
+      + round.additions.reduce((added, item) => added + item.product.price, 0),
     0,
   );
 
@@ -27,9 +29,12 @@ export function BasketTray({ rounds, resolved }: BasketTrayProps) {
 
       <ul className="divide-y divide-line">
         <AnimatePresence initial={false}>
-          {inBasket.map((round) => (
+          {inBasket.flatMap((round) => [
+            { course: round.course, product: round.chosen.product, reason: "" },
+            ...round.additions.map((item) => ({ course: round.course, ...item })),
+          ]).map((item, index) => (
             <motion.li
-              key={round.course}
+              key={`${item.course}-${item.product.id}-${index}`}
               layout
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -37,23 +42,23 @@ export function BasketTray({ rounds, resolved }: BasketTrayProps) {
             >
               <span className="relative size-10 shrink-0 overflow-hidden rounded-md bg-sand">
                 <Image
-                  src={round.chosen.product.image}
+                  src={item.product.image}
                   alt=""
                   fill
                   sizes="40px"
-                  className="object-cover"
+                  className="object-contain p-0.5"
                 />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="eyebrow block text-muted/80">
-                  {COURSE_LABEL[round.course]}
+                  {item.reason || COURSE_LABEL[item.course]}
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-plum">
-                  {round.chosen.product.name}
+                  {item.product.name}
                 </span>
               </span>
               <span className="shrink-0 text-sm font-medium text-plum tabular-nums">
-                {formatPrice(round.chosen.product.price)}
+                {formatPrice(item.product.price)}
               </span>
             </motion.li>
           ))}
@@ -67,7 +72,9 @@ export function BasketTray({ rounds, resolved }: BasketTrayProps) {
       </ul>
 
       <div className="flex items-baseline justify-between border-t border-line px-5 py-4">
-        <span className="text-sm text-muted">Total so far</span>
+        <span className="text-sm text-muted">
+          {total > budget ? `£${(total - budget).toFixed(2)} over budget` : "Total so far"}
+        </span>
         <motion.span
           key={total}
           initial={{ opacity: 0.4 }}

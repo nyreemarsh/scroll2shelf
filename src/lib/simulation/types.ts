@@ -1,20 +1,32 @@
 import type { CatalogueProduct, Course } from "@/lib/catalogue";
+import type { MealAddition } from "./meal";
 
 export type Move = "rock" | "paper" | "scissors";
 
 export type ShopperId = "a" | "b";
 
-export interface Persona {
+export type HealthGoal = "balanced" | "protein" | "vegetables" | "less-sugar";
+
+/** The nine editable preference controls in the two-hour prototype. */
+export interface ShopperPreferences {
+  priceSensitivity: number;
+  treatAppetite: number;
+  flavourBoldness: number;
+  noveltySeeking: number;
+  trendAffinity: number;
+  healthOrientation: number;
+  healthGoal: HealthGoal;
+  easePreference: number;
+  sustainabilityPriority: number;
+  wasteAvoidance: number;
+}
+
+export interface Persona extends ShopperPreferences {
   id: string;
   name: string;
   tagline: string;
   budget: number;
   noveltySeeking: number;
-  indulgence: number;
-  priceSensitivity: number;
-  trendAffinity: number;
-  premiumPreference: number;
-  healthOrientation: number;
 }
 
 export interface Candidate {
@@ -24,40 +36,35 @@ export interface Candidate {
   reasons: { label: string; weight: number }[];
 }
 
-export type DecisionStyleId = "even" | "lopsided" | "joint";
-
 /**
  * The engine-facing form of the retailer's parameters. Built by
  * `resolveParameters`; the engine never reads `SimulationParameters` directly.
  */
 export interface ModelSettings {
   courses: Course[];
-  /** Multipliers on each scoring weight in `MODEL_CONFIG.weights`. */
-  weightScale: {
-    novelty: number;
-    indulgence: number;
-    viralPotential: number;
-    premium: number;
-    dateNight: number;
-    health: number;
-  };
-  priceSensitivityScale: number;
-  /** 0–1 weight on the product's observed TikTok signal. */
-  trendExposure: number;
-  /** Budget for the night in £. The basket is shared, so the gate is too. */
+  /** Soft shared budget: the model may exceed it and reports when it does. */
   budget: number;
-  decisionStyle: DecisionStyleId;
-  /** Tag to filter on, and the courses with a big enough tagged pool. */
-  dietary: { tag: string; courses: Course[] } | null;
+  couple: {
+    compromise: number;
+    winnerControl: number;
+    budgetFlexibility: number;
+    sharingPreference: number;
+  };
+  aisleExperiment: {
+    enabled: boolean;
+    aisleA: string;
+    aisleB: string;
+    /** Additive utility bonus once the basket contains the paired aisle. */
+    effect: number;
+  };
   /**
-   * Probability each course is played on a given night. Starts as the observed
-   * rate from the TikTok sample; an intervention is nothing more than a change
-   * to one of these numbers.
+   * Observed prior for each course. The engine combines it with both personas'
+   * visible preferences before deciding whether that course belongs in a shop.
    */
   courseParticipation: Record<Course, number>;
 }
 
-export type InterventionId = "wildcard-display" | "drink-pairing";
+export type InterventionId = "aisle-colocation";
 
 /**
  * A retailer action, expressed only as a change to the run's parameters. The
@@ -90,26 +97,49 @@ export interface RoundResult {
   /** More than one entry means the round was drawn and replayed. */
   throws: { a: Move; b: Move }[];
   winner: ShopperId;
-  /** True when both shoppers' preferences were blended into one shortlist. */
+  /** True when compromise leaves both partners with effectively equal say. */
   decidedJointly: boolean;
+  winnerInfluence: number;
   /** Ranked candidates per shopper for this course. */
   suggestions: Record<ShopperId, Candidate[]>;
   chosen: Candidate;
+  additions: MealAddition[];
+  closeAlternative: Candidate | null;
   runningTotal: number;
+}
+
+export interface CourseDecision {
+  course: Course;
+  selected: boolean;
+  /** Persona-led likelihood that this course belongs in the basket. */
+  probability: number;
+  /** Plain-language explanation shown in the walkthrough and results. */
+  reason: string;
 }
 
 export interface MissionResult {
   rounds: RoundResult[];
+  courseDecisions: CourseDecision[];
   total: number;
+  unavailableCourses: Course[];
 }
 
 export interface SimulationSummary {
   runs: number;
   averageBasket: number;
   medianBasket: number;
+  minBasket: number;
+  maxBasket: number;
+  overBudgetRate: number;
+  averageOverspend: number;
   histogram: { bucket: string; count: number }[];
   topByCourse: Record<Course, { product: CatalogueProduct; share: number }[]>;
   categorySpend: { course: Course; spend: number }[];
+  commonPairings: {
+    products: [CatalogueProduct, CatalogueProduct];
+    share: number;
+  }[];
+  commonBaskets: { products: CatalogueProduct[]; share: number }[];
   /**
    * Share of simulated nights where the couple reached for the course, before
    * the budget gate. Comparable with `evidence.courseParticipation`.

@@ -74,7 +74,7 @@ export function RoundTheatre({
                 <span className="font-medium text-plum">
                   {winnerName(round.winner, shopperA, shopperB)}
                 </span>{" "}
-                picks this course
+                wins · {Math.round(round.winnerInfluence * 100)}% influence on the pick
               </>
             )}
             {draws > 0 ? (

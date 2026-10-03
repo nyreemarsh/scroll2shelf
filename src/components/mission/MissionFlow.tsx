@@ -1,23 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { personaById } from "@/data/personas";
-import {
-  compareIntervention,
-  runMonteCarlo,
-  simulateMission,
-} from "@/lib/simulation/engine";
+import { personaWithPreferences } from "@/data/personas";
+import { runMonteCarlo, simulateMission } from "@/lib/simulation/engine";
 import {
   DEFAULT_PARAMETERS,
-  INTERVENTIONS,
   resolveParameters,
   type SimulationParameters,
 } from "@/lib/simulation/parameters";
-import type {
-  InterventionComparison,
-  SimulationSummary,
-} from "@/lib/simulation/types";
+import type { SimulationSummary } from "@/lib/simulation/types";
 import type { Course } from "@/lib/catalogue";
 import { ConfigureStep } from "./ConfigureStep";
 import { HomeOverview } from "./HomeOverview";
@@ -26,15 +18,15 @@ import { SimulateStep } from "./SimulateStep";
 import { useMissionStep } from "./MissionStepContext";
 
 const MONTE_CARLO_RUNS = 10_000;
-/** Each comparison is two more full runs, so it gets a smaller budget. */
-const COMPARISON_RUNS = 4_000;
 
 interface CompletedRun {
   summary: SimulationSummary;
   parameters: SimulationParameters;
   courses: Course[];
-  comparisons: InterventionComparison[];
+  example: ReturnType<typeof simulateMission>;
 }
+
+const STORAGE_KEY = "scroll2shelf:simulation:v3";
 
 export function MissionFlow({ seed }: { seed: number }) {
   const { step, direction, advanceTo, goTo } = useMissionStep();
@@ -43,9 +35,10 @@ export function MissionFlow({ seed }: { seed: number }) {
   const [parameters, setParameters] =
     useState<SimulationParameters>(DEFAULT_PARAMETERS);
   const [run, setRun] = useState<CompletedRun | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
-  const shopperA = personaById(parameters.shopperA);
-  const shopperB = personaById(parameters.shopperB);
+  const shopperA = personaWithPreferences(parameters.shopperA, parameters.preferencesA);
+  const shopperB = personaWithPreferences(parameters.shopperB, parameters.preferencesB);
   const settings = useMemo(() => resolveParameters(parameters), [parameters]);
 
   const mission = useMemo(
@@ -57,6 +50,33 @@ export function MissionFlow({ seed }: { seed: number }) {
     setParameters((current) => ({ ...current, ...patch }));
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as Partial<SimulationParameters>;
+          const supported = Object.fromEntries(
+            Object.keys(DEFAULT_PARAMETERS)
+              .filter((key) => key in parsed)
+              .map((key) => [key, parsed[key as keyof SimulationParameters]]),
+          ) as Partial<SimulationParameters>;
+          setParameters((current) => ({ ...current, ...supported }));
+        }
+      } catch {
+        // A malformed or unavailable local store should never block the demo.
+      } finally {
+        setHydrated(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parameters));
+  }, [hydrated, parameters]);
+
   // ~300ms for 10k runs, so it stays on the main thread rather than behind a
   // worker; the CTA covers the wait.
   const scaleUp = useCallback(() => {
@@ -65,17 +85,14 @@ export function MissionFlow({ seed }: { seed: number }) {
       runs: MONTE_CARLO_RUNS,
       settings,
     });
-    const comparisons = INTERVENTIONS.map((intervention) =>
-      compareIntervention(shopperA, shopperB, {
-        seed,
-        runs: COMPARISON_RUNS,
-        settings,
-        intervention,
-      }),
-    );
-    setRun({ summary, parameters, courses: settings.courses, comparisons });
+    setRun({
+      summary,
+      parameters,
+      courses: settings.courses,
+      example: mission,
+    });
     advanceTo("results");
-  }, [shopperA, shopperB, seed, settings, parameters, advanceTo]);
+  }, [shopperA, shopperB, seed, settings, parameters, mission, advanceTo]);
 
   const offset = reduceMotion ? 0 : direction * 24;
 
@@ -109,6 +126,7 @@ export function MissionFlow({ seed }: { seed: number }) {
             mission={mission}
             shopperA={shopperA}
             shopperB={shopperB}
+            budget={parameters.budget}
             onScaleUp={scaleUp}
           />
         ) : null}
@@ -117,8 +135,7 @@ export function MissionFlow({ seed }: { seed: number }) {
           <ResultsStep
             summary={run.summary}
             courses={run.courses}
-            comparisons={run.comparisons}
-            comparisonRuns={COMPARISON_RUNS}
+            example={run.example}
             onBackToOverview={() => goTo("home")}
             onReconfigure={() => goTo("configure")}
           />

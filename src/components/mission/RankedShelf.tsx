@@ -57,7 +57,7 @@ export function RankedShelf({ summary, courses }: RankedShelfProps) {
                       alt=""
                       fill
                       sizes="56px"
-                      className="object-cover"
+                      className="object-contain p-0.5"
                     />
                     {position === 0 ? (
                       <span className="absolute top-0 left-0 bg-popcorn px-1.5 py-0.5 text-[10px] font-bold text-plum">

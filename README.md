@@ -1,24 +1,75 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Run locally from a fresh clone
 
-First, run the development server:
+Requirements:
+
+- Node.js 20.9 or newer (Node 22 LTS is recommended)
+- npm, which is included with Node.js
+
+Clone the repository, install the exact dependency versions from the lockfile,
+and start the development server:
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+No environment variables, external APIs, remote fonts, Python setup, or
+catalogue rebuild are required to run the checked-in app. The product data
+lives in `src/data/` and the product images live in
+`public/images/products/`; both directories must be included in commits pushed
+to GitHub.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+To verify a checkout before sharing it:
+
+```bash
+npm run lint
+npm run build
+npm start
+```
+
+`npm run build` first verifies that every catalogue image is bundled in the
+repository, so an incomplete Git commit fails with an actionable message.
+
+## Product cutouts for the virtual shelves
+
+The 240 selected catalogue products use transparent, background-removed WebP
+images committed in `public/images/products/`. A fresh clone uses these files
+directly and does not need access to the source catalogue.
+
+For maintainers rebuilding the catalogue, the source of truth is the flat folder at
+`../data/mands/images_no_background/`; its CSV mapping is
+`../data/mands/mands_image_background_removal.csv`.
+
+Run the following after rebuilding the catalogue, or whenever the source
+cutouts change:
+
+```bash
+npm run sync:cutouts
+```
+
+This validates every selected product and publishes the matching files to
+`public/images/products/`. The app stores each image as
+`/images/products/<source-image-id>.webp`, so every virtual-shelf surface
+(product cards, basket and ranked shelf) uses the same local transparent asset.
+
+## Dinner basket rules
+
+The setup no longer exposes course presets, dietary requirements or allergy
+filters. The simulator uses a fixed starter → main → dessert journey, with a
+drink played at the observed participation rate. `src/lib/simulation/meal.ts`
+checks whether a product can lead a course and adds food needed for two people:
+something to eat with a dip, a second portion for a small main, vegetables and
+potatoes for a plain protein, and a second small dessert. Additions appear in
+the basket and count towards the displayed price and simulation results.
+
+These are transparent, name-based prototype rules. For a production-quality
+selection, add reviewed product metadata for serving count, food role,
+preparation status and compatible accompaniments; use that metadata to build
+and score complete meal bundles.
 
 ## Learn More
 
