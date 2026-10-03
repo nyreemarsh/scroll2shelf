@@ -43,24 +43,20 @@ interface HomeOverviewProps {
 export function HomeOverview({ run, onExplore, onReset }: HomeOverviewProps) {
   return (
     <div className="space-y-14 lg:space-y-20">
-      <DashboardHeader
-        retailer={retailer}
-        title="Good morning. Here's what's moving."
-        ranges={timeRanges}
-        freshness={dataFreshness}
-      />
+      <section className="space-y-6">
+        <DashboardHeader
+          retailer={retailer}
+          title="Good morning. Here's what's moving."
+          ranges={timeRanges}
+          freshness={dataFreshness}
+        />
 
-      {run ? (
-        <RunInsights run={run} onExplore={onExplore} onReset={onReset} />
-      ) : (
-        <section>
-          <SectionHeading
-            eyebrow="Latest finding"
-            title="What the model surfaced overnight"
-          />
+        {run ? (
+          <RunInsights run={run} onExplore={onExplore} onReset={onReset} />
+        ) : (
           <LatestFindingCard finding={latestFinding} />
-        </section>
-      )}
+        )}
+      </section>
 
       <section>
         <SectionHeading

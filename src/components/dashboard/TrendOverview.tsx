@@ -1,11 +1,10 @@
-import { Play, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { DetectedTrend } from "@/lib/types";
 import { TrendMomentumChart } from "@/components/charts/TrendMomentumChart";
 import { ShoppingMissionFlow } from "@/components/dashboard/ShoppingMissionFlow";
 import { ArrowLink } from "@/components/ui/ArrowButton";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { DotPattern } from "@/components/ui/DotPattern";
 import { formatCompactNumber } from "@/lib/utils";
 
 export function TrendOverview({ trend }: { trend: DetectedTrend }) {
@@ -26,23 +25,25 @@ export function TrendOverview({ trend }: { trend: DetectedTrend }) {
 
   return (
     <Card className="overflow-hidden">
-      <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-10">
+      <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-10">
         <div className="flex flex-col">
-          <div className="relative flex min-h-[240px] flex-1 items-center justify-center overflow-hidden rounded-lg bg-plum">
-            <DotPattern className="opacity-15" size={18} />
-            <div className="relative flex size-14 items-center justify-center rounded-full border border-popcorn/40 bg-popcorn/15">
-              <Play className="size-5 fill-popcorn text-popcorn" />
-            </div>
-            <span className="eyebrow absolute top-4 left-4 text-cream/45">
+          <div className="relative aspect-[9/16] max-h-[380px] overflow-hidden rounded-lg bg-plum">
+            <video
+              className="absolute inset-0 h-full w-full object-cover"
+              src="/videos/1.mp4"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+            />
+            <span className="eyebrow absolute top-4 left-4 rounded-full bg-plum/70 px-2.5 py-1 text-cream/90">
               Trend clip
-            </span>
-            <span className="absolute bottom-4 left-4 text-xs text-cream/45">
-              Video placeholder
             </span>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-muted">
-            Social activity is summarised, not replayed. Scroll2Shelf stores
-            signals rather than content.
+            Clip 1 from the hand-coded TikTok sample. Sound is off so it can
+            play on the page.
           </p>
         </div>
 

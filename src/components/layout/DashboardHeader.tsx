@@ -15,12 +15,12 @@ export function DashboardHeader({
   freshness,
 }: DashboardHeaderProps) {
   return (
-    <header className="mb-10 flex flex-wrap items-start justify-between gap-6 lg:mb-14">
+    <header className="flex flex-wrap items-start justify-between gap-5">
       <div>
         <p className="eyebrow text-muted">
           {retailer.name} · {retailer.market}
         </p>
-        <h1 className="mt-3 max-w-2xl text-[2rem] leading-[1.1] font-semibold tracking-tight text-plum lg:text-[2.75rem]">
+        <h1 className="mt-2 text-3xl leading-tight font-semibold tracking-tight text-plum lg:text-4xl">
           {title}
         </h1>
       </div>

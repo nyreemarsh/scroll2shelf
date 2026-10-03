@@ -23,29 +23,28 @@ export function LatestFindingCard({ finding }: { finding: Finding }) {
   const selection = finding.metrics.find((metric) => metric.id === "selection");
 
   return (
-    <article className="rounded-card border border-popcorn-200 bg-popcorn-50 p-6 sm:p-8 lg:p-11">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:gap-14">
-        <div>
+    <article className="rounded-card border border-popcorn-200 bg-popcorn-50 p-6 sm:p-8">
+      <div className="grid items-stretch gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-10">
+        <div className="min-w-0">
           <p className="eyebrow flex items-center gap-2 text-plum/70">
             <Sparkles className="size-3.5" strokeWidth={2.2} />
             {finding.label}
           </p>
 
-          <h2 className="mt-5 max-w-[26ch] text-[1.75rem] leading-[1.18] font-semibold tracking-tight text-plum lg:text-[2.4rem]">
+          <h2 className="mt-4 text-3xl leading-snug font-semibold tracking-tight text-plum lg:text-4xl">
             <Headline text={finding.headline} emphasis={finding.emphasis} />
           </h2>
 
-          <div className="mt-8 flex flex-col items-start gap-2 border-l-4 border-popcorn pl-5 sm:flex-row sm:items-end sm:gap-5">
-            <CountUp
-              {...finding.stat}
-              className="text-[3.5rem] leading-[0.9] font-semibold tracking-tight text-plum tabular-nums lg:text-[4.5rem]"
-            />
-            <p className="max-w-[20ch] pb-1.5 text-sm text-muted">
+          <div className="mt-6 flex items-end gap-5 border-l-4 border-popcorn pl-5">
+            <p className="shrink-0 text-6xl leading-none font-semibold tracking-tight text-plum tabular-nums">
+              <CountUp {...finding.stat} />
+            </p>
+            <p className="max-w-[16rem] pb-1 text-sm leading-relaxed text-muted">
               {finding.statCaption}
             </p>
           </div>
 
-          <div className="mt-9">
+          <div className="mt-8">
             <p className="eyebrow text-muted">Why it&rsquo;s moving</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {finding.reasons.map((reason) => (
@@ -56,7 +55,7 @@ export function LatestFindingCard({ finding }: { finding: Finding }) {
             </div>
           </div>
 
-          <dl className="mt-9 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-popcorn-200 bg-popcorn-200 sm:grid-cols-3">
+          <dl className="mt-8 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-popcorn-200 bg-popcorn-200 sm:grid-cols-3">
             {finding.metrics.map((metric) => (
               <div key={metric.id} className="bg-popcorn-50 px-4 py-3.5">
                 <dt className="sr-only">{metric.label}</dt>
@@ -72,11 +71,11 @@ export function LatestFindingCard({ finding }: { finding: Finding }) {
             ))}
           </dl>
 
-          <ArrowButton label={finding.cta} className="mt-9" />
+          <ArrowButton label={finding.cta} className="mt-8" />
         </div>
 
         <div className="flex flex-col rounded-card border border-line bg-white p-5">
-          <div className="relative flex min-h-[260px] flex-1 items-center justify-center overflow-hidden rounded-lg bg-sand/70">
+          <div className="relative flex min-h-[240px] flex-1 items-center justify-center overflow-hidden rounded-lg bg-sand/70">
             {finding.product.image ? (
               <Image
                 src={finding.product.image}

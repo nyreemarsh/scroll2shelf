@@ -12,11 +12,23 @@ import { cn } from "@/lib/utils";
 
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cn("text-xl font-semibold tracking-tight", className)}>
-      {/* Cerulean, not Popcorn: the accent sits on cream here, and Popcorn
-          disappears against it. */}
-      scroll<span className="text-cerulean">2</span>shelf
-    </span>
+    // Inline size + filter: Tailwind's img preflight sets `height: auto`,
+    // which otherwise lets the 819×359 PNG paint at full size and stay yellow.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/images/logo.png"
+      alt="scroll2shelf"
+      width={146}
+      height={64}
+      className={className}
+      style={{
+        display: "block",
+        height: 48,
+        width: "auto",
+        maxHeight: 48,
+        filter: "brightness(0)",
+      }}
+    />
   );
 }
 
@@ -29,14 +41,14 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-[1280px] items-center justify-between gap-4 px-5 py-3.5 sm:px-8 lg:px-12">
+      <div className="mx-auto flex w-full max-w-[1280px] items-center justify-between gap-4 px-5 py-3 sm:px-8 lg:px-12">
         <button
           type="button"
           onClick={() => goTo("home")}
-          className="flex items-baseline gap-2.5 text-left"
+          className="flex flex-col items-start gap-0.5 text-left"
         >
-          <Wordmark className="text-plum" />
-          <span className="hidden text-[11px] tracking-wide text-muted sm:inline">
+          <Wordmark />
+          <span className="text-[11px] tracking-wide text-muted">
             AI retail intelligence
           </span>
         </button>
