@@ -219,13 +219,13 @@ export function ConfigureStep({ parameters, onChange, onRun }: ConfigureStepProp
         </div>
       </section> : null}
 
-      <div className="sticky bottom-0 -mx-5 border-t border-line bg-cream/90 px-5 py-4 backdrop-blur sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
+      <div className="sticky bottom-0 z-20 -mx-5 border-t border-line bg-cream/95 px-5 py-4 shadow-[0_-8px_24px_rgba(63,43,43,0.04)] backdrop-blur sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
+        <div className="grid gap-3 sm:flex sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-plum">{section.label}</p>
             <p className="text-xs text-muted">Saved automatically in this browser.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
             <button
               type="button"
               onClick={() => {
@@ -235,15 +235,18 @@ export function ConfigureStep({ parameters, onChange, onRun }: ConfigureStepProp
                 }
                 setActiveSection((current) => Math.max(0, current - 1));
               }}
-              className="inline-flex items-center gap-2 rounded-lg border border-line-strong px-4 py-2.5 text-sm font-medium text-plum transition hover:bg-sand"
+              className="inline-flex min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-line-strong px-3 py-2.5 text-sm font-medium text-plum transition hover:bg-sand sm:px-4"
             >
-              <ArrowLeft className="size-4" />
-              {activeSection === 0 ? "Back to overview" : "Back"}
+              <ArrowLeft className="size-4 shrink-0" />
+              <span className="sm:hidden">Back</span>
+              <span className="hidden sm:inline">
+                {activeSection === 0 ? "Back to overview" : "Back"}
+              </span>
             </button>
             <ArrowButton
-              label={isLastSection ? "Run the simulation" : `Next: ${SETUP_SECTIONS[activeSection + 1].label}`}
+              label={isLastSection ? "Run simulation" : `Next: ${SETUP_SECTIONS[activeSection + 1].label}`}
               onClick={isLastSection ? onRun : () => setActiveSection((current) => Math.min(SETUP_SECTIONS.length - 1, current + 1))}
-              className="px-5 py-2.5"
+              className="min-w-0 justify-center whitespace-nowrap px-3 py-2.5 [&_svg]:hidden sm:px-5 sm:[&_svg]:block"
             />
           </div>
         </div>

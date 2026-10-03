@@ -295,19 +295,14 @@ function Controls({
   disabled: boolean;
   isLastRound: boolean;
 }) {
-  const button =
-    "inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-plum transition-colors hover:bg-sand";
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
+    <div className="flex items-center">
+      <ArrowButton
+        label={isLastRound ? "View basket" : "Next"}
         onClick={onNext}
         disabled={disabled}
-        className={`${button} disabled:cursor-not-allowed disabled:opacity-50`}
-      >
-        {isLastRound ? "View basket" : "Next"}
-      </button>
+        className="min-w-36 justify-between rounded-xl px-6 py-3.5 text-base shadow-sm disabled:bg-plum/60 disabled:opacity-100"
+      />
     </div>
   );
 }

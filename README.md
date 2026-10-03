@@ -62,9 +62,12 @@ The setup no longer exposes course presets, dietary requirements or allergy
 filters. The simulator uses a fixed starter → main → dessert journey, with a
 drink played at the observed participation rate. `src/lib/simulation/meal.ts`
 checks whether a product can lead a course and adds food needed for two people:
-something to eat with a dip, a second portion for a small main, vegetables and
-potatoes for a plain protein, and a second small dessert. Additions appear in
-the basket and count towards the displayed price and simulation results.
+something to eat with a dip, a different compatible main or substantial side
+for a small main, and a different dessert when one portion is too small.
+Additions appear in the basket and count towards the displayed price and
+simulation results. A product is never paired with the same SKU again; basket
+pairings and complete-basket summaries also de-duplicate product IDs as a
+defensive safeguard.
 
 These are transparent, name-based prototype rules. For a production-quality
 selection, add reviewed product metadata for serving count, food role,

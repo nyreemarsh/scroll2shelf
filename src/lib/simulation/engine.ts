@@ -461,12 +461,21 @@ export function runMonteCarlo(
     }
     totals.push(runningTotal);
 
-    for (let i = 0; i < basket.length; i += 1) {
-      for (let j = i + 1; j < basket.length; j += 1) {
-        increment(pairCounts, [basket[i].id, basket[j].id].sort().join("|"));
+    const distinctBasket = [
+      ...new Map(basket.map((product) => [product.id, product])).values(),
+    ];
+    for (let i = 0; i < distinctBasket.length; i += 1) {
+      for (let j = i + 1; j < distinctBasket.length; j += 1) {
+        increment(
+          pairCounts,
+          [distinctBasket[i].id, distinctBasket[j].id].sort().join("|"),
+        );
       }
     }
-    increment(basketCounts, basket.map((product) => product.id).join("|"));
+    increment(
+      basketCounts,
+      distinctBasket.map((product) => product.id).join("|"),
+    );
   }
 
   const runs = Math.max(opts.runs, 1);
